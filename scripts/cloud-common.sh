@@ -8,7 +8,7 @@ readonly CLOUD_IPA_NAME="Celeste-tvOS-unsigned.ipa"
 readonly CLOUD_METADATA_NAME="Celeste-tvOS-build.txt"
 readonly CLOUD_CACHE_PREFIX="celeste-tvos-safe-native-v1-"
 readonly CLOUD_PUBLIC_REPOSITORY="hmcneill46/celeste-ios"
-readonly CLOUD_PUBLIC_SOURCE_SHA="b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e"
+readonly CLOUD_PUBLIC_SOURCE_SHA="390744065f4c984c75b2bfa1a6e643a137095cb7"
 readonly CLOUD_NATIVE_LOGICAL_SHA256="6286e0545b32e9c56732955d4cf816ed8f5dc0d816ab610dd9fe1752090a01fc"
 readonly CLOUD_MINIMUM_FREE_GIB=25
 
