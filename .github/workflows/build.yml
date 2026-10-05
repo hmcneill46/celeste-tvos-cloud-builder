@@ -1,10 +1,24 @@
-name: Build Celeste for Apple TV
+name: Build Celeste for Apple platforms
 
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: Devices to build for (iOS includes iPhone and iPad)
+        required: true
+        default: tvos
+        type: choice
+        options:
+          - tvos
+          - ios
+          - both
+      ios_bundle_id:
+        description: Optional iPhone/iPad app identity inside the unsigned IPA
+        required: false
+        default: io.github.celeste-ios.cloud
+        type: string
       bundle_id:
-        description: Optional app identity used inside the unsigned IPA
+        description: Optional Apple TV app identity inside the unsigned IPA
         required: false
         default: io.github.celeste-tvos.cloud
         type: string
@@ -19,15 +33,21 @@ concurrency:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       GH_TOKEN: ${{ github.token }}
-      CLOUD_PUBLIC_REPOSITORY: hmcneill46/celeste-ios
-      CLOUD_PUBLIC_SOURCE_SHA: b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e
+      CLOUD_PUBLIC_REPOSITORY: hmcneill46/morro-celeste
+      CLOUD_PUBLIC_SOURCE_SHA: cc02b0cc697bd620c0dc864d4af3c60d79a95e85
       CLOUD_NATIVE_LOGICAL_SHA256: 6286e0545b32e9c56732955d4cf816ed8f5dc0d816ab610dd9fe1752090a01fc
       CLOUD_INPUT_TAG: celeste-tvos-inputs
       CLOUD_OUTPUT_TAG: celeste-tvos-output
       CLOUD_BUNDLE_ID: ${{ inputs.bundle_id }}
+      CLOUD_IOS_BUNDLE_ID: ${{ inputs.ios_bundle_id }}
+      CLOUD_PLATFORM: ${{ inputs.platform }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      MSBUILDDISABLENODEREUSE: "1"
+      DOTNET_CLI_USE_MSBUILD_SERVER: "0"
+      UseSharedCompilation: "false"
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
@@ -47,7 +67,7 @@ jobs:
           PY
           then
             {
-              echo '# Celeste for Apple TV — Build refused'
+              echo '# Celeste — Build refused'
               echo
               echo '**This workflow only runs in a private repository.**'
               echo
@@ -75,12 +95,21 @@ jobs:
             'The exact GitHub macOS build environment is unavailable.' \
             'Retry later or use the local Mac builder; do not bypass the pinned toolchain checks.'
 
+          case "$CLOUD_PLATFORM" in
+            ios|tvos|both) ;;
+            *) echo 'error: choose tvos, ios, or both' >&2; exit 1 ;;
+          esac
           test "$(uname -m)" = arm64
-          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
           xcodebuild -checkFirstLaunchStatus
           xcode_version_output="$(xcodebuild -version)"
           test "${xcode_version_output%%$'\n'*}" = 'Xcode 26.6'
           test "$(xcrun --sdk appletvos --show-sdk-version)" = '26.5'
+          if [[ "$CLOUD_PLATFORM" != tvos ]]; then
+            test "$(xcrun --sdk iphoneos --show-sdk-version)" = '26.5'
+          fi
+          # The template has no global.json; newer installed SDKs must not win.
+          printf '%s\n' '{"sdk":{"version":"10.0.302","rollForward":"disable","allowPrerelease":false}}' > global.json
+          test "$(dotnet --version)" = '10.0.302'
 
           command -v gmake >/dev/null 2>&1 || brew install make
           command -v monodis >/dev/null 2>&1 || brew install mono
@@ -98,12 +127,11 @@ jobs:
               --install-dir "$install_root" --skip-non-versioned-files
           fi
 
-          if ! dotnet workload list 2>/dev/null | grep -Eq '^[[:space:]]*tvos[[:space:]]'; then
-            dotnet workload install tvos --version 10.0.302.0
-          fi
-          test "$(dotnet --version)" = '10.0.302'
-          test "$(dotnet workload list | awk '/Workload version:/ {print $3; exit}')" = '10.0.302.0'
-          dotnet workload list | grep -Eq '^[[:space:]]*tvos[[:space:]]'
+          workloads=(tvos)
+          if [[ "$CLOUD_PLATFORM" != tvos ]]; then workloads+=(ios); fi
+          # Explicitly select the workload set even if the image has newer workloads.
+          dotnet workload install "${workloads[@]}" --version 10.0.302.0
+          test "$(dotnet workload --version)" = '10.0.302.0'
           dotnet --list-runtimes | grep -Eq '^Microsoft\.NETCore\.App 6\.0\.36 '
           python3 scripts/prepare-inputs.py check-disk --path "$RUNNER_TEMP" --minimum-gib 25
 
@@ -131,7 +159,12 @@ jobs:
           test -z "$(git -C "$source_root" submodule status --recursive | awk '/^[+U]/')"
           echo "CELESTE_SOURCE_ROOT=$source_root" >> "$GITHUB_ENV"
           echo "Pinned public source: ${CLOUD_PUBLIC_SOURCE_SHA:0:12}"
-          "$source_root/build-tvos.sh" --check-host
+          if [[ "$CLOUD_PLATFORM" != ios ]]; then
+            (cd "$source_root" && ./build-tvos.sh --check-host)
+          fi
+          if [[ "$CLOUD_PLATFORM" != tvos ]]; then
+            (cd "$source_root" && ./build-ios.sh --doctor --non-interactive)
+          fi
 
       - name: Inspect private input Release
         shell: bash
@@ -207,8 +240,16 @@ jobs:
           mkdir -p "$(dirname "$celeste_manifest")" "$(dirname "$fmod_manifest")"
           "$CELESTE_SOURCE_ROOT/scripts/validate-celeste-input.sh" \
             --game-root "$CELESTE_GAME_ROOT" --output "$celeste_manifest"
-          "$CELESTE_SOURCE_ROOT/scripts/validate-fmod-tvos-sdk.sh" \
-            --sdk-root "$FMOD_SDK_ROOT" --output "$fmod_manifest"
+          if [[ "$CLOUD_PLATFORM" != ios ]]; then
+            "$CELESTE_SOURCE_ROOT/scripts/validate-fmod-tvos-sdk.sh" \
+              --sdk-root "$FMOD_SDK_ROOT" --output "$fmod_manifest"
+          fi
+          if [[ "$CLOUD_PLATFORM" != tvos ]]; then
+            python3 "$CELESTE_SOURCE_ROOT/scripts/validate-fmod-ios-sdk.py" \
+              --sdk-root "$FMOD_SDK_ROOT" \
+              --lock "$CELESTE_SOURCE_ROOT/native/fmod-ios-dependencies.lock.json" \
+              --output "$CELESTE_SOURCE_ROOT/.build/ios-self-build/cloud-fmod.json"
+          fi
           python3 - "$celeste_manifest" <<'PY'
           import json, pathlib, sys
           value = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -222,6 +263,7 @@ jobs:
           echo 'Exact Celeste and FMOD validation: PASS; transferred ZIP removed from runner'
 
       - name: Compute safe cache identity
+        if: inputs.platform != 'ios'
         shell: bash
         run: |
           set -euo pipefail
@@ -235,6 +277,7 @@ jobs:
 
       # actions/cache v6.1.0. Only redistributable/open-source native outputs.
       - name: Restoring safe cache
+        if: inputs.platform != 'ios'
         id: native-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -255,74 +298,29 @@ jobs:
           cloud_verify_safe_cache_paths "$CELESTE_SOURCE_ROOT"
           echo 'Safe native cache hit and independent verification: PASS'
 
-      - name: Building Celeste for Apple TV
+      - name: Build and verify selected vanilla products
         shell: bash
         run: |
           set -euo pipefail
           source scripts/cloud-common.sh
           cloud_set_stage \
-            'The existing eight-phase Celeste builder failed.' \
-            'Open the failed phase, use its bounded diagnostic tail, and correct the first reported problem.'
-          cd "$CELESTE_SOURCE_ROOT"
-          ./build-tvos.sh \
-            --non-interactive \
-            --mode ipa \
+            'A selected builder or product verifier failed.' \
+            'Open the failed phase and correct its first reported problem. No partial build is published.'
+          output_root="$RUNNER_TEMP/celeste-tvos-cloud-output"
+          echo "CLOUD_OUTPUT_ROOT=$output_root" >> "$GITHUB_ENV"
+          python3 scripts/build-products.py build \
+            --platform "$CLOUD_PLATFORM" \
+            --source-root "$CELESTE_SOURCE_ROOT" \
+            --source-sha "$CLOUD_PUBLIC_SOURCE_SHA" \
+            --output-root "$output_root" \
             --game-root "$CELESTE_GAME_ROOT" \
             --fmod-root "$FMOD_SDK_ROOT" \
             --bundle-id "$CLOUD_BUNDLE_ID" \
-            --no-color
-
-      - name: Verifying IPA
-        shell: bash
-        run: |
-          set -euo pipefail
-          source scripts/cloud-common.sh
-          cloud_set_stage \
-            'The unsigned IPA did not pass the complete product verification chain.' \
-            'Keep the private input Release and inspect the verifier error before retrying.'
-          cd "$CELESTE_SOURCE_ROOT"
-          ipa='dist/Celeste-tvOS-unsigned.ipa'
-          scripts/verify-celeste-tvos-stage14.sh --ipa "$ipa" \
-            --output artifacts/tvos-self-build/stage18c-stage14-verification.json
-          scripts/verify-celeste-tvos-stage15.sh \
-            --generated-root .build/celeste-runtime/stage6-current/audio/managed --ipa "$ipa"
-          scripts/verify-celeste-tvos-stage16b.sh \
-            --generated-root .build/celeste-runtime/stage6-current/audio/managed \
-            --native-manifest .build/tvos-host/normalized-manifest.json --ipa "$ipa"
-          ipa_bytes="$(stat -f %z "$ipa")"
-          if [[ "$ipa_bytes" -ge 2147483648 ]]; then
-            cloud_fail \
-              "The unsigned IPA exceeds GitHub Releases' 2 GiB per-file limit." \
-              'Use the local Mac builder and report the unexpected product-size regression.'
-          fi
-          ipa_sha="$(shasum -a 256 "$ipa" | awk '{print $1}')"
-          profile="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["profileId"])' "$CELESTE_SOURCE_ROOT/.build/celeste-runtime/stage18c-cloud/celeste-input.json")"
-          output_root="$RUNNER_TEMP/celeste-tvos-cloud-output"
-          mkdir -p "$output_root"
-          cat > "$output_root/$CLOUD_METADATA_NAME" <<EOF
-          Celeste for Apple TV private cloud build
-          Public source commit: $CLOUD_PUBLIC_SOURCE_SHA
-          Celeste profile: $profile
-          IPA bytes: $ipa_bytes
-          IPA SHA-256: $ipa_sha
-          Configuration: Release tvos-arm64
-          Full AOT: true
-          Full trimming: true
-          UseInterpreter: false
-          Signed: false
-          EOF
-          cp "$ipa" "$output_root/$CLOUD_IPA_NAME"
-          {
-            echo "CLOUD_OUTPUT_ROOT=$output_root"
-            echo "CLOUD_IPA_BYTES=$ipa_bytes"
-            echo "CLOUD_IPA_SHA256=$ipa_sha"
-            echo "CLOUD_CELESTE_PROFILE=$profile"
-          } >> "$GITHUB_ENV"
-          printf 'Verified IPA: %s bytes; SHA-256 %s\n' "$ipa_bytes" "$ipa_sha"
+            --ios-bundle-id "$CLOUD_IOS_BUNDLE_ID"
 
       # actions/cache v6.1.0. No proprietary/generated game path is listed.
       - name: Save safe cache after a cache miss
-        if: success() && steps.native-cache.outputs.cache-hit != 'true'
+        if: success() && inputs.platform != 'ios' && steps.native-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
@@ -330,69 +328,16 @@ jobs:
             ${{ runner.temp }}/celeste-tvos-cloud-source/.build/tvos-host
           key: ${{ env.CLOUD_CACHE_KEY }}
 
-      - name: Publishing private IPA
+      - name: Publishing private IPAs
         shell: bash
         run: |
           set -euo pipefail
           source scripts/cloud-common.sh
           cloud_set_stage \
-            'The verified IPA could not be published to the private output Release.' \
-            'The input Release remains available. Retry after checking repository Release permissions.'
-          cloud_ensure_output_absent
-          notes="$CLOUD_OUTPUT_ROOT/release-notes.md"
-          cat > "$notes" <<EOF
-          # Celeste for Apple TV — unsigned build
-
-          This is an **UNSIGNED** signing-ready IPA generated privately from user-supplied files.
-          It cannot be installed until it is signed for an Apple TV.
-
-          - Source: \`$CLOUD_PUBLIC_SOURCE_SHA\`
-          - Celeste input: \`$CLOUD_CELESTE_PROFILE\`
-          - Size: \`$CLOUD_IPA_BYTES bytes\`
-          - SHA-256: \`$CLOUD_IPA_SHA256\`
-
-          Keep this output private. After downloading it, run **Clean private build files**.
-          Signing and installation are separate: https://github.com/$CLOUD_PUBLIC_REPOSITORY/blob/$CLOUD_PUBLIC_SOURCE_SHA/README.md#create-a-signing-ready-ipa
-          EOF
-          gh release create "$CLOUD_OUTPUT_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title 'Celeste for Apple TV — unsigned IPA' \
-            --notes-file "$notes" \
-            "$CLOUD_OUTPUT_ROOT/$CLOUD_IPA_NAME#$CLOUD_IPA_NAME" \
-            "$CLOUD_OUTPUT_ROOT/$CLOUD_METADATA_NAME#$CLOUD_METADATA_NAME"
-          gh release view "$CLOUD_OUTPUT_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,isPrerelease,assets > "$CLOUD_OUTPUT_ROOT/release.json"
-          python3 - "$CLOUD_OUTPUT_ROOT/release.json" \
-            "$CLOUD_OUTPUT_ROOT/$CLOUD_IPA_NAME" \
-            "$CLOUD_OUTPUT_ROOT/$CLOUD_METADATA_NAME" <<'PY'
-          import hashlib
-          import json, pathlib, sys
-          release = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          assets = {item["name"]: item for item in release["assets"]}
-          expected = {
-              "Celeste-tvOS-unsigned.ipa": pathlib.Path(sys.argv[2]),
-              "Celeste-tvOS-build.txt": pathlib.Path(sys.argv[3]),
-          }
-          def sha256(path):
-              value = hashlib.sha256()
-              with path.open("rb") as stream:
-                  for block in iter(lambda: stream.read(1024 * 1024), b""):
-                      value.update(block)
-              return value.hexdigest()
-          if release.get("isDraft") or set(assets) != set(expected):
-              raise SystemExit("error: private output Release metadata is incomplete")
-          for name, path in expected.items():
-              asset = assets[name]
-              if asset.get("size") != path.stat().st_size:
-                  raise SystemExit(f"error: GitHub output size differs for {name}")
-              digest = sha256(path)
-              server_digest = asset.get("digest") or ""
-              if server_digest and server_digest != "sha256:" + digest:
-                  raise SystemExit(f"error: GitHub output digest differs for {name}")
-          PY
-          cloud_write_success_summary "$CLOUD_OUTPUT_ROOT/$CLOUD_METADATA_NAME"
-          echo "Private output Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$CLOUD_OUTPUT_TAG"
+            'The verified IPAs could not be published to the private output Release.' \
+            'Check Release permissions and any incomplete output draft before retrying; existing outputs are preserved.'
+          python3 scripts/build-products.py publish \
+            --platform "$CLOUD_PLATFORM" --output-root "$CLOUD_OUTPUT_ROOT"
 
       - name: Cleaning runner
         if: always()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared, bounded orchestration for the private Celeste tvOS cloud builder.
+# Shared, bounded orchestration for the private Celeste Apple cloud builder.
 set -euo pipefail
 
 readonly CLOUD_INPUT_TAG="celeste-tvos-inputs"
@@ -7,8 +7,8 @@ readonly CLOUD_OUTPUT_TAG="celeste-tvos-output"
 readonly CLOUD_IPA_NAME="Celeste-tvOS-unsigned.ipa"
 readonly CLOUD_METADATA_NAME="Celeste-tvOS-build.txt"
 readonly CLOUD_CACHE_PREFIX="celeste-tvos-safe-native-v1-"
-readonly CLOUD_PUBLIC_REPOSITORY="hmcneill46/celeste-ios"
-readonly CLOUD_PUBLIC_SOURCE_SHA="b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e"
+readonly CLOUD_PUBLIC_REPOSITORY="hmcneill46/morro-celeste"
+readonly CLOUD_PUBLIC_SOURCE_SHA="cc02b0cc697bd620c0dc864d4af3c60d79a95e85"
 readonly CLOUD_NATIVE_LOGICAL_SHA256="6286e0545b32e9c56732955d4cf816ed8f5dc0d816ab610dd9fe1752090a01fc"
 readonly CLOUD_MINIMUM_FREE_GIB=25
 
@@ -155,8 +155,13 @@ cloud_capture_builder_failure() {
   local source_root="${1:-}" state
   state="$(cloud_state_root)"
   mkdir -p "$state"
-  if [[ -n "$source_root" && -f "$source_root/dist/logs/last-error.txt" ]]; then
-    tail -n 40 "$source_root/dist/logs/last-error.txt" > "$state/builder-failure.txt" || true
+  if [[ -n "$source_root" ]]; then
+    local relative
+    for relative in dist/logs/last-error.txt artifacts/ios/logs/last-error.txt; do
+      if [[ -f "$source_root/$relative" ]]; then
+        tail -n 40 "$source_root/$relative" >> "$state/builder-failure.txt" || true
+      fi
+    done
   fi
 }
 
@@ -193,7 +198,7 @@ cloud_write_failure_summary() {
   stage="$(cat "$state/stage.txt" 2>/dev/null || printf 'The cloud build did not complete.')"
   remedy="$(cat "$state/remedy.txt" 2>/dev/null || printf 'Open the failed step for its first meaningful error, correct it, and run the workflow again.')"
   {
-    printf '# Celeste for Apple TV — Build stopped\n\n'
+    printf '# Celeste — Build stopped\n\n'
     printf '**Problem:** %s\n\n' "$stage"
     printf '**What to do:** %s\n\n' "$remedy"
     printf 'Your private `%s` input Release was not deleted automatically, so it remains available for a retry.\n' "$CLOUD_INPUT_TAG"
