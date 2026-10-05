@@ -1,13 +1,14 @@
-# Celeste for Apple TV — private cloud builder
+# Celeste for iPhone, iPad and Apple TV — private cloud builder
 
 > [!IMPORTANT]
 > **Your generated builder repository must be Private before you upload Celeste
 > or FMOD. Never upload copyrighted game files to this public template.**
 
-This template compiles an unsigned Celeste tvOS IPA on GitHub's Mac runner.
-You provide game files you own and the official FMOD SDK in your own private
-repository; the workflow validates them, runs the existing Celeste Apple TV
-self-builder, and gives you a verified unsigned IPA.
+Choose **tvOS, iOS, or both** to compile vanilla Celeste on GitHub's Mac runner.
+iOS builds one app for iPhone and iPad. Supply your own game files and official
+FMOD SDK privately; the workflow validates them and invokes Morro's existing
+platform builders. Each product is full AOT with no JIT or interpreter.
+This template builds vanilla Celeste; it does not build Everest or other mods.
 
 You do not need a Mac, Git, or a terminal for compilation. Signing,
 provisioning, and installation are separate: the resulting IPA is **not
@@ -17,7 +18,7 @@ installable until it is signed**.
 
 - A GitHub account.
 - One ZIP containing an [exact supported Celeste 1.4.0.0 FNA
-  input](https://github.com/hmcneill46/celeste-ios/blob/b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e/docs/CELESTE_INPUTS.md).
+  input](https://github.com/hmcneill46/morro-celeste/blob/cc02b0cc697bd620c0dc864d4af3c60d79a95e85/docs/CELESTE_INPUTS.md).
 - The original official **FMOD Engine iOS/tvOS 1.10.09 build 97915 DMG**.
 
 You must own Celeste and obtain FMOD through your own FMOD account. This
@@ -49,9 +50,9 @@ You need exactly:
 - one `.dmg`: FMOD Engine iOS/tvOS 1.10.09 build 97915.
 
 The main project explains how to obtain clean files you already own through
-[itch.io, Steam, or Epic Games Store](https://github.com/hmcneill46/celeste-ios/blob/b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e/README.md#getting-a-clean-supported-celeste-copy)
+[itch.io, Steam, or Epic Games Store](https://github.com/hmcneill46/morro-celeste/blob/cc02b0cc697bd620c0dc864d4af3c60d79a95e85/README.md#getting-a-clean-supported-celeste-copy)
 and where to obtain the [official FMOD
-SDK](https://github.com/hmcneill46/celeste-ios/blob/b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e/README.md#fmod-sdk).
+SDK](https://github.com/hmcneill46/morro-celeste/blob/cc02b0cc697bd620c0dc864d4af3c60d79a95e85/README.md#fmod-sdk).
 
 If your Celeste download is already a supported ZIP, upload it directly. If
 you have an extracted game folder or app, compress that one folder/app into one
@@ -91,13 +92,16 @@ Do not add extra Release assets.
 ### 4. Build
 
 1. Open the **Actions** tab.
-2. Select **Build Celeste for Apple TV** in the left sidebar.
-3. Click **Run workflow**, then the green **Run workflow** button.
+2. Select **Build Celeste for Apple platforms** in the left sidebar.
+3. Click **Run workflow** and choose `tvos`, `ios`, or `both`.
+4. Click the green **Run workflow** button.
 
-The default bundle identifier is usable for an unsigned build, so most users
-should leave it unchanged. A first build was measured at about 30–35 minutes;
-a repeat using the safe cache was about 15 minutes. These are examples, not
-guarantees. Long native and full-AOT phases print a heartbeat every 60 seconds,
+The default target remains `tvos`. Each platform has its own optional bundle
+identifier; most users should leave the defaults unchanged. `both` downloads
+inputs once and builds tvOS, then iOS sequentially. Nothing is published until
+all selected products pass verification. Historical tvOS builds took about
+30–35 minutes initially and about 15 minutes with cache. Those examples do not
+predict iOS or `both`; iOS currently builds without a cross-run native cache. Long native and full-AOT phases print a heartbeat every 60 seconds,
 including elapsed time and free disk, so a heartbeat means the build is still
 working.
 
@@ -110,15 +114,21 @@ and may be billed according to their plan and settings. See GitHub's current
 When the workflow finishes, its summary links to the private
 `celeste-tvos-output` Release. Open it and download:
 
-`Celeste-tvOS-unsigned.ipa`
+| Target | IPA | Build record |
+| --- | --- | --- |
+| `tvos` | `Celeste-tvOS-unsigned.ipa` | `Celeste-tvOS-build.txt` |
+| `ios` | `Celeste-iOS-unsigned.ipa` | `Celeste-iOS-build.txt` |
+| `both` | Both IPAs | Both records |
 
-The Release also contains a tiny text file with the source commit, detected
-Celeste profile, size, and SHA-256.
+Each record gives the source commit, detected Celeste profile, size and SHA-256.
+The legacy `celeste-tvos-inputs` and `celeste-tvos-output` tags serve all targets
+so existing private repositories and Cleanup keep working.
 
 The IPA is unsigned. Follow the main project's [unsigned IPA and signing
-guidance](https://github.com/hmcneill46/celeste-ios/blob/b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e/README.md#create-a-signing-ready-ipa)
+guidance](https://github.com/hmcneill46/morro-celeste/blob/cc02b0cc697bd620c0dc864d4af3c60d79a95e85/README.md#create-a-signing-ready-ipa)
+for Apple TV or the [iPhone/iPad guide](https://github.com/hmcneill46/morro-celeste/blob/main/docs/IOS_BUILDING.md#cloud-build-without-a-mac)
 for the separate signing/install step. Keep the final signed bundle identifier
-stable between replacement installs if you want tvOS to keep using the same
+stable between replacement installs if you want the device to keep using the same
 app-data domain.
 
 ### 6. Clean up
@@ -145,7 +155,7 @@ cleanup workflow removes the two private Releases from GitHub.
 
 Private does not mean the files stay on your own computer. If you do not want
 to upload them to GitHub, use the [local Mac
-builder](https://github.com/hmcneill46/celeste-ios/blob/b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e/docs/BUILDING.md)
+builder](https://github.com/hmcneill46/morro-celeste/blob/cc02b0cc697bd620c0dc864d4af3c60d79a95e85/docs/BUILDING.md)
 instead.
 
 The built IPA contains user-supplied Celeste content and should remain private
@@ -173,8 +183,9 @@ Use one exact supported Celeste profile and the original FMOD Engine iOS/tvOS
 
 ### The output Release already exists
 
-Download it if wanted, run **Clean private build files**, then run Build again.
-The workflow refuses to overwrite an IPA you may not have downloaded yet.
+Download it if wanted, run **Clean private build files**, upload your two inputs
+again, then run Build. Cleanup removes both Releases. Published outputs and
+incomplete upload drafts are preserved until you explicitly clean them up.
 
 ### The build looks stuck
 
@@ -196,15 +207,15 @@ receives Apple credentials and produces an unsigned signing-ready IPA only.
 
 ### I need more help
 
-See the main project's [cloud-building guide](https://github.com/hmcneill46/celeste-ios/blob/b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e/docs/CLOUD_BUILDING.md)
-and [troubleshooting guide](https://github.com/hmcneill46/celeste-ios/blob/b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e/docs/TROUBLESHOOTING.md).
+See the main project's [cloud-building guide](https://github.com/hmcneill46/morro-celeste/blob/main/docs/CLOUD_BUILDING.md)
+and [troubleshooting guide](https://github.com/hmcneill46/morro-celeste/blob/cc02b0cc697bd620c0dc864d4af3c60d79a95e85/docs/TROUBLESHOOTING.md).
 
 ## Technical and security design
 
 <details>
 <summary>Show implementation details</summary>
 
-- The workflow triggers only by manual `workflow_dispatch`, has a 120-minute
+- The workflow triggers only by manual `workflow_dispatch`, has a 180-minute
   timeout, and serializes build/cleanup operations.
 - Its first step queries the GitHub API and requires both `private=true` and
   `visibility=private` before any input operation.
@@ -212,7 +223,7 @@ and [troubleshooting guide](https://github.com/hmcneill46/celeste-ios/blob/b5f2e
   SHAs. The token grants only repository contents access for private Releases;
   cleanup additionally gets narrowly scoped cache deletion permission.
 - The workflow checks out public Celeste-port commit
-  `b5f2ec2fdd5c65c533d86aae750ee60dcaf5009e` with reachable history and exact
+  `cc02b0cc697bd620c0dc864d4af3c60d79a95e85` with reachable history and exact
   recursive submodules. It never follows a floating branch.
 - ZIP paths, links, special files, duplicates, expanded size, and extraction
   root are bounded before extraction. Existing Stage 17 and FMOD validators
@@ -221,11 +232,23 @@ and [troubleshooting guide](https://github.com/hmcneill46/celeste-ios/blob/b5f2e
   `.build/tvos-host`. They contain redistributable/open-source native outputs,
   not Celeste, FMOD, generated game source, content, an app, or an IPA.
 - The output is a private GitHub Release asset, not a normal Actions artifact.
-- The runner uses Release `tvos-arm64`, full AOT, full trimming, and
-  `UseInterpreter=false`, then reruns the package/product verifier chain.
+- The runner uses Release `tvos-arm64` or `ios-arm64`, full AOT, full trimming,
+  and `UseInterpreter=false`. Each actual IPA passes the existing platform
+  package/product verifiers. iOS packaging supports both iPhone and iPad.
+- Xcode 26.6 is selected with `DEVELOPER_DIR`. The SDK is pinned to .NET
+  10.0.302 before installing workload set 10.0.302.0. Builds run serially with
+  build servers, shared compilation and node reuse disabled.
+- Uploaded assets are checked in a draft before the output Release is published.
+  A failed second build or verifier cannot publish a partial `both` result.
 
 Maintainers deliberately update the pinned source only after validating a new
 accepted commit, running the template verifier, and completing a representative
 private cloud build.
 
 </details>
+
+## Updating an existing private builder
+
+Template changes do not automatically reach existing repositories. Copy all
+six current files (including `scripts/build-products.py`) into your private
+builder. Keep its visibility private and its input/output tags unchanged.
